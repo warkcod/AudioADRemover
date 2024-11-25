@@ -319,33 +319,78 @@ def ensure_dir(file_path):
         os.makedirs(directory)
 
 
-from mutagen.easyid3 import EasyID3
-from mutagen.id3 import ID3, APIC, error
-
 from mutagen.id3 import ID3, TIT2, ID3NoHeaderError
+from mutagen.mp4 import MP4, MP4Tags
+from pydub import AudioSegment
 
 def update_metadata(file_path):
-    try:
-        audio = ID3(file_path)
-    except ID3NoHeaderError:
-        audio = ID3()
-
+    file_extension = os.path.splitext(file_path)[1].lower()
     title = os.path.splitext(os.path.basename(file_path))[0]
 
-    # 清除现有的所有标签（如果需要保留封面或其他特定标签，请在此进行调整）
-    audio.clear()
+    if file_extension == ".mp3":
+        try:
+            from mutagen.id3 import ID3, TIT2, ID3NoHeaderError
+            try:
+                audio = ID3(file_path)
+            except ID3NoHeaderError:
+                audio = ID3()
 
-    # 仅添加标题标签
-    audio.add(TIT2(encoding=3, text=title))
+            # 清除现有的所有标签（如果需要保留封面或其他特定标签，请在此进行调整）
+            audio.clear()
 
-    # 保存更改，如果文件之前没有ID3标签，这也会添加一个标签
-    audio.save(file_path)
+            # 仅添加标题标签
+            audio.add(TIT2(encoding=3, text=title))
+
+            # 保存更改，如果文件之前没有ID3标签，这也会添加一个标签
+            audio.save(file_path)
+            print(f"Metadata updated successfully for {file_path}")
+        except Exception as e:
+            print(f"Error updating metadata for {file_path}: {e}")
+
+    elif file_extension == ".m4a":
+        try:
+            audio = MP4(file_path)
+            print(f"Loaded MP4 file: {file_path}")
+            print(f"Existing tags: {audio.tags}")
+            if audio.tags is None:
+                audio.add_tags()
+
+            audio.tags["\xa9nam"] = title  # 设置标题标签
+
+            audio.save()
+            print(f"Metadata updated successfully for {file_path}")
+        except Exception as e:
+            print(f"Error updating metadata for {file_path}: {e}")
+
+        try:
+            # 尝试使用 pydub 重新加载和保存文件
+            audio_segment = AudioSegment.from_file(file_path, format="m4a")
+            temp_path = "/tmp/temp.m4a"
+            audio_segment.export(temp_path, format="m4a")
+
+            # 更新导出的文件元数据
+            audio = MP4(temp_path)
+            if audio.tags is None:
+                audio.add_tags()
+
+            audio.tags["\xa9nam"] = title
+            audio.save()
+
+            # 替换原始文件
+            os.replace(temp_path, file_path)
+            print(f"Metadata updated successfully for {file_path} using pydub")
+        except Exception as e:
+            print(f"Error updating metadata for {file_path} using pydub: {e}")
+    else:
+        print(f"Unsupported file format: {file_extension}")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Remove ads from audio files.')
     parser.add_argument('--ad_file', type=str, required=True, help='Path to the ad file.')
     parser.add_argument('--input_dir', type=str, required=True, help='Directory containing input mp3 files.')
     parser.add_argument('--output_dir', type=str, required=True, help='Directory to save output mp3 files.')
+    parser.add_argument('--remove_tags_only', type=bool, required=False, help='Remove tags only.')
 
     args = parser.parse_args()
     ad_file = args.ad_file
@@ -361,7 +406,7 @@ if __name__ == '__main__':
     for root, dirs, files in os.walk(input_dir):
         for file in files:
             # 构建完整的输入文件路径
-            if file.lower().endswith('.mp3'):
+            if file.lower().endswith('.mp3') or file.lower().endswith('.m4a'):
                 input_file = os.path.join(root, file)
 
                 # 构建输出文件的路径，保持与input_dir相同的目录结构
@@ -374,8 +419,10 @@ if __name__ == '__main__':
                 # 确保输出文件的目录存在
                 ensure_dir(output_file)
 
-                # 对每个文件执行remove_ads操作
-                remove_ads(ad_file, input_file, output_file)
-
-                # 更新标题元数据
-                update_metadata(output_file)
+                # 如果需要移除标签，只更新标题
+                if args.remove_tags_only:
+                    update_metadata(input_file)
+                else:
+                    # 如果不需要移除标签，执行remove_ads操作
+                    remove_ads(ad_file, input_file, output_file)
+                    update_metadata(output_file)
