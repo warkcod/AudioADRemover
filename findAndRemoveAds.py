@@ -236,6 +236,11 @@ def remove_matched_segments(long_audio_path, matches, output_path, sr, force_upd
     # 加载长音频文件为立体声，不改变采样率
     long_audio, sr = librosa.load(long_file_wav, sr=None, mono=False)
 
+    # 确保 long_audio 是二维的，如果是一维的，则升维扩展
+    if len(long_audio.shape) == 1:
+        long_audio = np.expand_dims(long_audio, axis=0)
+        print(f"Processing change from 1 dims to 2.")
+
     # 逆序处理匹配项
     for _, row in matches[::-1].iterrows():
         start_sample = int(row['start'] * sr)
