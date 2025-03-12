@@ -392,15 +392,20 @@ def update_metadata(file_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Remove ads from audio files.')
-    parser.add_argument('--ad_file', type=str, required=True, help='Path to the ad file.')
     parser.add_argument('--input_dir', type=str, required=True, help='Directory containing input mp3 files.')
-    parser.add_argument('--output_dir', type=str, required=True, help='Directory to save output mp3 files.')
-    parser.add_argument('--remove_tags_only', type=bool, required=False, help='Remove tags only.')
+    parser.add_argument('--ad_file', type=str, required=False, help='Path to the ad file.')
+    parser.add_argument('--output_dir', type=str, required=False, help='Directory to save output mp3 files.')
+    parser.add_argument('--remove_tags_only', action='store_true', help='Remove tags only.')
 
     args = parser.parse_args()
-    ad_file = args.ad_file
     input_dir = args.input_dir
-    output_dir = args.output_dir
+
+    # 当不是只移除标签模式时，检查必要的参数
+    if not args.remove_tags_only:
+        if not args.ad_file or not args.output_dir:
+            parser.error("--ad_file and --output_dir are required when not in remove_tags_only mode")
+        ad_file = args.ad_file
+        output_dir = args.output_dir
 
     # configuration
     samplerate = 44100
@@ -414,20 +419,20 @@ if __name__ == '__main__':
             if file.lower().endswith('.mp3') or file.lower().endswith('.m4a'):
                 input_file = os.path.join(root, file)
 
-                # 构建输出文件的路径，保持与input_dir相同的目录结构
-                relative_path = os.path.relpath(root, input_dir)
-                output_file_dir = os.path.join(output_dir, relative_path)
-                output_file = os.path.join(output_file_dir, file)
-
-                logger.debug(f'Processing input_file {input_file}, output_file:{output_file}')
-
-                # 确保输出文件的目录存在
-                ensure_dir(output_file)
-
                 # 如果需要移除标签，只更新标题
                 if args.remove_tags_only:
                     update_metadata(input_file)
                 else:
-                    # 如果不需要移除标签，执行remove_ads操作
+                    # 构建输出文件的路径，保持与input_dir相同的目录结构
+                    relative_path = os.path.relpath(root, input_dir)
+                    output_file_dir = os.path.join(output_dir, relative_path)
+                    output_file = os.path.join(output_file_dir, file)
+
+                    logger.debug(f'Processing input_file {input_file}, output_file:{output_file}')
+
+                    # 确保输出文件的目录存在
+                    ensure_dir(output_file)
+
+                    # 执行remove_ads操作
                     remove_ads(ad_file, input_file, output_file)
                     update_metadata(output_file)
